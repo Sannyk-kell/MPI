@@ -1,0 +1,42 @@
+#include <stdio.h>
+#include <omp.h>
+#include <limits.h>
+
+int main() {
+    int A[15], D[20];
+    int Amin = INT_MAX, Dmin = INT_MAX;
+
+    for (int i = 0; i < 15; i++) A[i] = 10 + i;
+    for (int j = 0; j < 20; j++) D[j] = 5 + j * 2;
+
+    #pragma omp parallel sections
+    {
+        #pragma omp section
+        {
+            for (int i = 0; i < 15; i++) {
+                if (A[i] < Amin)
+                    Amin = A[i];
+            }
+            printf("Thread %d found Amin = %d\n", omp_get_thread_num(), Amin);
+        }
+
+        #pragma omp section
+        {
+            for (int j = 0; j < 20; j++) {
+                if (D[j] < Dmin)
+                    Dmin = D[j];
+            }
+            printf("Thread %d found Dmin = %d\n", omp_get_thread_num(), Dmin);
+        }
+    }
+
+    printf("\nAmin = %d, Dmin = %d\n", Amin, Dmin);
+    if (Amin < Dmin)
+        printf("Amin is smaller.\n");
+    else if (Amin > Dmin)
+        printf("Dmin is smaller.\n");
+    else
+        printf("Both are equal.\n");
+
+    return 0;
+}
