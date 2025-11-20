@@ -1,0 +1,31 @@
+#include <stdio.h>
+#include <math.h>
+#include <omp.h>
+
+int main(int argc, char **argv)
+{
+    unsigned intervals;
+    int j;
+    double h, Ik, x;
+
+    printf("Enter intervals: ");
+    scanf("%u", &intervals);
+
+    h = 16.0 / intervals; 
+    Ik = 0;
+
+    #pragma omp parallel
+        {
+    #pragma omp for private(x) reduction(+ : Ik)
+            for (j = 0; j < intervals; j++)
+            {
+                x = (j + 0.5) * h;
+                Ik += (sqrt(x + 9) + sqrt(x)) / 9.0; 
+            }
+        }
+
+        Ik *= h;
+        printf("value = %.10lf\n", Ik);
+
+        return 0;
+}
