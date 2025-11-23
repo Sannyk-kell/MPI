@@ -1,0 +1,182 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <omp.h>
+
+void print_matrix(double *M, int n, const char *name) {
+    printf("Matrix %s (%dx%d):\n", name, n, n);
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j)
+            printf("%8.4f ", M[i*n + j]);
+        printf("\n");
+    }
+}
+
+void print_vector(double *v, int n, const char *name) {
+    printf("Vector %s (size %d):\n", name, n);
+    for (int i = 0; i < n; ++i)
+        printf("%8.4f\n", v[i]);
+    printf("\n");
+}
+
+double *alloc_matrix(int n) {
+    double *M = (double*) malloc(sizeof(double) * n * n);
+    if (!M) { perror("malloc"); exit(EXIT_FAILURE); }
+    return M;
+}
+
+double *alloc_vector(int n) {
+    double *v = (double*) malloc(sizeof(double) * n);
+    if (!v) { perror("malloc"); exit(EXIT_FAILURE); }
+    return v;
+}
+
+int main() {
+    int n;
+    int input_mode;
+    int print_choice;
+    srand((unsigned) time(NULL));
+
+    printf("Variant 2: compute y1 = A*b, y2 = A1*(b1 + 2*c1), Y3 = A2*(C2 - B2)\n");
+    printf("Enter matrix order n (positive integer): ");
+    if (scanf("%d", &n) != 1 || n <= 0) {
+        printf("Invalid n\n");
+        return 1;
+    }
+
+    printf("Data input mode: 1 = manual, 2 = random generation: ");
+    if (scanf("%d", &input_mode) != 1) return 1;
+
+    printf("Print intermediate results? 1 = yes, 0 = no: ");
+    if (scanf("%d", &print_choice) != 1) return 1;
+
+    double *A  = alloc_matrix(n);   
+    double *b  = alloc_vector(n);
+
+    double *A1 = alloc_matrix(n);   
+    double *b1 = alloc_vector(n);
+    double *c1 = alloc_vector(n);
+
+    double *A2 = alloc_matrix(n);   
+    double *B2 = alloc_matrix(n);
+    double *C2 = alloc_matrix(n);
+    double *Y3 = alloc_matrix(n);   
+
+    double *y1 = alloc_vector(n);
+    double *y2 = alloc_vector(n);
+
+    if (input_mode == 1) {
+        printf("Enter matrix A (n x n), row by row:\n");
+        for (int i = 0; i < n*n; ++i) scanf("%lf", &A[i]);
+        printf("Enter vector b (n elements):\n");
+        for (int i = 0; i < n; ++i) scanf("%lf", &b[i]);
+
+        printf("Enter matrix A1 (n x n):\n");
+        for (int i = 0; i < n*n; ++i) scanf("%lf", &A1[i]);
+        printf("Enter vector b1 (n elements):\n");
+        for (int i = 0; i < n; ++i) scanf("%lf", &b1[i]);
+        printf("Enter vector c1 (n elements):\n");
+        for (int i = 0; i < n; ++i) scanf("%lf", &c1[i]);
+
+        printf("Enter matrix A2 (n x n):\n");
+        for (int i = 0; i < n*n; ++i) scanf("%lf", &A2[i]);
+        printf("Enter matrix B2 (n x n):\n");
+        for (int i = 0; i < n*n; ++i) scanf("%lf", &B2[i]);
+    } else {
+        for (int i = 0; i < n*n; ++i) A[i] = (double)(rand() % 10 + 1);
+        for (int i = 0; i < n; ++i) b[i] = (double)(rand() % 10 + 1);
+
+        for (int i = 0; i < n*n; ++i) A1[i] = (double)(rand() % 10 + 1);
+        for (int i = 0; i < n; ++i) {
+            b1[i] = (double)(rand() % 10 + 1);
+            c1[i] = (double)(rand() % 10 + 1);
+        }
+
+        for (int i = 0; i < n*n; ++i) A2[i] = (double)(rand() % 10 + 1);
+        for (int i = 0; i < n*n; ++i) B2[i] = (double)(rand() % 10 + 1);
+    }
+
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+            C2[i*n + j] = 1.0 / ((i+1) + (j+1));
+
+    for (int idx = 0; idx < n; ++idx) {
+        int i1 = idx + 1;
+        if (i1 % 2 == 0) {
+            b[idx] = 1.0 / ( (double)(i1*i1) + 2.0 + (double)i1 );
+        } else {
+            b[idx] = 1.0 / (double)i1;
+        }
+    }
+
+    if (print_choice) {
+        print_matrix(A, n, "A");
+        print_vector(b, n, "b (variant)");
+        print_matrix(A1, n, "A1");
+        print_vector(b1, n, "b1");
+        print_vector(c1, n, "c1");
+        print_matrix(A2, n, "A2");
+        print_matrix(B2, n, "B2");
+        print_matrix(C2, n, "C2");
+    }
+
+#pragma omp parallel sections
+    {
+#pragma omp section
+        {
+#pragma omp parallel for
+            for (int i = 0; i < n; ++i) {
+                double sum = 0.0;
+                for (int j = 0; j < n; ++j) sum += A[i*n + j] * b[j];
+                y1[i] = sum;
+            }
+        }
+
+#pragma omp section
+        {
+            double *t = alloc_vector(n);
+            for (int i = 0; i < n; ++i) t[i] = b1[i] + 2.0 * c1[i];
+
+#pragma omp parallel for
+            for (int i = 0; i < n; ++i) {
+                double sum = 0.0;
+                for (int j = 0; j < n; ++j) sum += A1[i*n + j] * t[j];
+                y2[i] = sum;
+            }
+            free(t);
+        }
+
+#pragma omp section
+        {
+            double *D = alloc_matrix(n);
+            for (int i = 0; i < n*n; ++i) D[i] = C2[i] - B2[i];
+
+#pragma omp parallel for
+            for (int i = 0; i < n; ++i) {
+                for (int j = 0; j < n; ++j) {
+                    double sum = 0.0;
+                    for (int k = 0; k < n; ++k)
+                        sum += A2[i*n + k] * D[k*n + j];
+                    Y3[i*n + j] = sum;
+                }
+            }
+            free(D);
+        }
+    } 
+
+    printf("\n--- Results ---\n");
+    print_vector(y1, n, "y1 = A * b");
+    print_vector(y2, n, "y2 = A1 * (b1 + 2*c1)");
+    print_matrix(Y3, n, "Y3 = A2 * (C2 - B2)");
+
+    free(A); free(b); free(A1); free(b1); free(c1);
+    free(A2); free(B2); free(C2); free(Y3);
+    free(y1); free(y2);
+
+    printf("\nShort analysis:\n");
+    printf("- Data parallelism: individual elements of y1, y2 and rows of Y3 computed independently (good for parallelization).\n");
+    printf("- Task parallelism: y1, y2, Y3 computed as separate sections in parallel.\n");
+    printf("- Synchronization: implicit barrier at end of parallel sections; internal parallel for have their own synchronizations.\n");
+
+    return 0;
+}
